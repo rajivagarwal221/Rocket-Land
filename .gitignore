@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtualenv (interpreter + installed packages only; do not commit)
+.venv/
+venv/
+env/
+
+# Training outputs (large; regenerable)
+logs/
+models/checkpoints/
+
+# Blender backups and render intermediates
+blender/*.blend1
+blender/sim_episode_frames/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local tooling
+.claude/
