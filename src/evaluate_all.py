@@ -25,10 +25,19 @@ import csv
 from pathlib import Path
 
 import gymnasium as gym
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 
 from thrust_scaled_lander import ThrustScaledLunarLander
 from target_landing import TargetLandingWrapper
+
+
+def load_model(path: Path):
+    """Auto-pick loader based on filename stem. SAC zips contain SACPolicy
+    which PPO.load can't instantiate (and vice versa)."""
+    stem = path.stem.lower()
+    if "sac" in stem:
+        return SAC.load(str(path), device="cpu")
+    return PPO.load(str(path), device="cpu")
 
 
 ROOT = Path(__file__).resolve().parent.parent  # project root
@@ -95,7 +104,7 @@ def read_stable_contact(env: gym.Env) -> int:
 
 def run(model_path: Path, episodes: int, seed_offset: int, render: bool = False) -> list[dict]:
     print(f"[eval] loading model: {model_path}")
-    model = PPO.load(str(model_path), device="cpu")
+    model = load_model(model_path)
     env = build_env(render=render)
 
     results = []
