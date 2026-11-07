@@ -20,13 +20,19 @@ class TargetLandingWrapper(gym.Wrapper):
         off_target_penalty=20.0,
         timeout_penalty=30.0,
         failed_landing_penalty=100.0,
-        settle_frames=15
+        settle_frames=15,
+        target_limit=0.15,
+        # --- V18 precision knobs (backward-compatible: defaults preserve V17) ---
+        commit_penalty_after=0,           # step index after which step_penalty triples
+        commit_penalty_height=0.3,        # ...when env obs y (altitude) exceeds this
+        commit_penalty_scale=3.0,         # multiplier applied to step_penalty when active
+        x_shaping_coef=0.0,               # per-step -k * x^2 * ground_proximity (0 = off)
     ):
 
         super().__init__(env)
 
         self.gamma = gamma
-        self.target_limit = 0.15
+        self.target_limit = target_limit
 
         self.step_penalty = step_penalty
         self.target_bonus = target_bonus
@@ -41,6 +47,13 @@ class TargetLandingWrapper(gym.Wrapper):
 
         self.half_width = VIEWPORT_W / SCALE / 2
         self.half_height = VIEWPORT_H / SCALE / 2
+
+        # V18 extras
+        self.commit_penalty_after = int(commit_penalty_after)
+        self.commit_penalty_height = float(commit_penalty_height)
+        self.commit_penalty_scale = float(commit_penalty_scale)
+        self.x_shaping_coef = float(x_shaping_coef)
+        self.steps_in_episode = 0
 
     # =====================================
     # PREDICT LANDING POSITION - V4
@@ -203,6 +216,7 @@ class TargetLandingWrapper(gym.Wrapper):
         )
 
         self.stable_contact_steps = 0
+        self.steps_in_episode = 0
 
         self.prev_potential = self.potential(
             observation
@@ -226,11 +240,14 @@ class TargetLandingWrapper(gym.Wrapper):
 
         raw_reward = float(raw_reward)
 
+        self.steps_in_episode += 1
+
         # ---------------------------------
         # OBSERVATION
         # ---------------------------------
 
         x = float(observation[0])
+        y = float(observation[1])
 
         both_legs = bool(
             observation[6] > 0.5
@@ -376,10 +393,34 @@ class TargetLandingWrapper(gym.Wrapper):
             timeout_reward = -self.timeout_penalty
 
         # ---------------------------------
-        # STEP PENALTY
+        # STEP PENALTY (with optional commit penalty)
         # ---------------------------------
 
-        time_reward = -self.step_penalty
+        effective_step_penalty = self.step_penalty
+        if (
+            self.commit_penalty_after > 0
+            and self.steps_in_episode > self.commit_penalty_after
+            and y > self.commit_penalty_height
+            and not terminated
+        ):
+            effective_step_penalty = (
+                self.step_penalty * self.commit_penalty_scale
+            )
+
+        time_reward = -effective_step_penalty
+
+        # ---------------------------------
+        # OPTIONAL x^2 LATERAL PRESSURE
+        # ---------------------------------
+
+        x_shaping_reward = 0.0
+        if self.x_shaping_coef > 0.0 and not terminated:
+            ground_proximity = 1.0 - np.clip(
+                max(0.0, y) / 0.75, 0.0, 1.0
+            )
+            x_shaping_reward = -(
+                self.x_shaping_coef * (x ** 2) * ground_proximity
+            )
 
         # ---------------------------------
         # FINAL REWARD
@@ -391,6 +432,7 @@ class TargetLandingWrapper(gym.Wrapper):
             + shaping_reward
             + timeout_reward
             + time_reward
+            + x_shaping_reward
         )
 
         # ---------------------------------

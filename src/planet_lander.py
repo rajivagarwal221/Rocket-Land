@@ -66,6 +66,9 @@ class PlanetLunarLander(RandomStartLunarLander):
         enable_wind=False,
         hard_start_probability=0.0,
         continuous=True,
+        # V18: oversample weak gravity so the agent sees more "long-fall" episodes.
+        weak_gravity_prob=0.0,
+        weak_gravity_cutoff=-5.0,
     ):
         # Initialise base env with a safe default, then overwrite self.gravity.
         super().__init__(
@@ -81,6 +84,12 @@ class PlanetLunarLander(RandomStartLunarLander):
         self.current_gravity = base_g
         self.gravity = base_g  # consumed by LunarLander.reset()
 
+        # V18 extras
+        self._weak_gravity_prob = float(np.clip(weak_gravity_prob, 0.0, 1.0))
+        self._weak_gravity_cutoff = float(
+            np.clip(weak_gravity_cutoff, GRAVITY_MIN, GRAVITY_MAX)
+        )
+
     def _pick_gravity(self):
         if self._gravity_range is None:
             return self._base_gravity
@@ -89,8 +98,14 @@ class PlanetLunarLander(RandomStartLunarLander):
         hi = float(np.clip(hi, GRAVITY_MIN, GRAVITY_MAX))
         if lo > hi:
             lo, hi = hi, lo
-        # self.np_random may not yet exist on very first reset; fall back.
         rng = getattr(self, "np_random", None) or np.random
+        if self._weak_gravity_prob > 0.0 and rng.random() < self._weak_gravity_prob:
+            # Bias toward weak gravity (closer to zero). cutoff is a negative
+            # number > lo; sample uniformly in [cutoff, hi] clipped to range.
+            weak_lo = max(lo, self._weak_gravity_cutoff)
+            weak_hi = hi
+            if weak_lo <= weak_hi:
+                return float(rng.uniform(weak_lo, weak_hi))
         return float(rng.uniform(lo, hi))
 
     def set_gravity(self, name_or_value):
