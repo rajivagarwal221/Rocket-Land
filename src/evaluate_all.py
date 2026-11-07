@@ -29,6 +29,7 @@ from stable_baselines3 import PPO, SAC
 
 from thrust_scaled_lander import ThrustScaledLunarLander
 from target_landing import TargetLandingWrapper
+from safety_shield import SafetyShield
 
 
 def load_model(path: Path):
@@ -45,13 +46,19 @@ ROOT = Path(__file__).resolve().parent.parent  # project root
 
 # ------------------------- env builder -------------------------
 
-def build_env(max_episode_steps: int = 1000, render: bool = False) -> gym.Env:
+def build_env(
+    max_episode_steps: int = 1000,
+    render: bool = False,
+    shield: bool = False,
+) -> gym.Env:
     # gravity_range activates per-reset gravity randomisation across planets
     # (Pluto -0.62 ... Neptune -11.15). Range clipped by env sanity bounds.
     env = ThrustScaledLunarLander(
         render_mode="human" if render else None,
         gravity_range=(-11.95, -0.5),
     )
+    if shield:
+        env = SafetyShield(env)
     env = TargetLandingWrapper(env)
     env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
     return env
@@ -102,10 +109,16 @@ def read_stable_contact(env: gym.Env) -> int:
 
 # ------------------------- main eval loop -------------------------
 
-def run(model_path: Path, episodes: int, seed_offset: int, render: bool = False) -> list[dict]:
-    print(f"[eval] loading model: {model_path}")
+def run(
+    model_path: Path,
+    episodes: int,
+    seed_offset: int,
+    render: bool = False,
+    shield: bool = False,
+) -> list[dict]:
+    print(f"[eval] loading model: {model_path}  shield={shield}")
     model = load_model(model_path)
-    env = build_env(render=render)
+    env = build_env(render=render, shield=shield)
 
     results = []
     for ep in range(episodes):
@@ -208,6 +221,8 @@ def main():
                     help="Output CSV (default: logs/evaluate_all_<stem>_<N>.csv)")
     ap.add_argument("--render", action="store_true",
                     help="Show the pygame window so you can watch each landing")
+    ap.add_argument("--shield", action="store_true",
+                    help="Wrap env with SafetyShield (use for V20 and later)")
     args = ap.parse_args()
 
     model_path = Path(args.model)
@@ -216,7 +231,10 @@ def main():
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rows = run(model_path, args.episodes, args.seed_offset, render=args.render)
+    rows = run(
+        model_path, args.episodes, args.seed_offset,
+        render=args.render, shield=args.shield,
+    )
 
     # ---- write CSV ----
     with open(out_path, "w", newline="") as f:
