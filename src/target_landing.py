@@ -27,6 +27,11 @@ class TargetLandingWrapper(gym.Wrapper):
         commit_penalty_height=0.3,        # ...when env obs y (altitude) exceeds this
         commit_penalty_scale=3.0,         # multiplier applied to step_penalty when active
         x_shaping_coef=0.0,               # per-step -k * x^2 * ground_proximity (0 = off)
+        # --- V22 stability knobs (backward-compatible: defaults preserve V21) ---
+        x_shaping_fade_below=0.0,         # altitude (normalized) below which x-shaping fades to 0 (0 = off)
+        angular_stability_bonus=0.0,      # extra terminal bonus for both-leg landing with low angle & omega (0 = off)
+        angular_stability_angle=0.15,     # |angle| threshold (rad)
+        angular_stability_omega=0.05,     # |omega| threshold
     ):
 
         super().__init__(env)
@@ -54,6 +59,12 @@ class TargetLandingWrapper(gym.Wrapper):
         self.commit_penalty_scale = float(commit_penalty_scale)
         self.x_shaping_coef = float(x_shaping_coef)
         self.steps_in_episode = 0
+
+        # V22 stability knobs
+        self.x_shaping_fade_below = float(x_shaping_fade_below)
+        self.angular_stability_bonus = float(angular_stability_bonus)
+        self.angular_stability_angle = float(angular_stability_angle)
+        self.angular_stability_omega = float(angular_stability_omega)
 
     # =====================================
     # PREDICT LANDING POSITION - V4
@@ -361,6 +372,21 @@ class TargetLandingWrapper(gym.Wrapper):
 
                 terminal_bonus = -self.off_target_penalty
 
+            # V22: reward upright, low-rotation two-leg touchdowns so the
+            # policy learns to arrive stable, not just precise.
+            if self.angular_stability_bonus > 0.0:
+
+                touchdown_angle = abs(float(observation[4]))
+                touchdown_omega = abs(float(observation[5]))
+
+                if (
+                    both_legs
+                    and touchdown_angle < self.angular_stability_angle
+                    and touchdown_omega < self.angular_stability_omega
+                ):
+
+                    terminal_bonus += self.angular_stability_bonus
+
         # ---------------------------------
         # POTENTIAL SHAPING
         # ---------------------------------
@@ -418,6 +444,14 @@ class TargetLandingWrapper(gym.Wrapper):
             ground_proximity = 1.0 - np.clip(
                 max(0.0, y) / 0.75, 0.0, 1.0
             )
+            # V22: fade x-shaping out very close to the ground so the policy
+            # commits to a vertical touchdown instead of chasing x in the
+            # last few frames (which was tipping the lander onto one leg).
+            if self.x_shaping_fade_below > 0.0:
+                altitude_gate = float(np.clip(
+                    max(0.0, y) / self.x_shaping_fade_below, 0.0, 1.0
+                ))
+                ground_proximity = ground_proximity * altitude_gate
             x_shaping_reward = -(
                 self.x_shaping_coef * (x ** 2) * ground_proximity
             )
