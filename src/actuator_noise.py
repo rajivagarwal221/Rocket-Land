@@ -43,17 +43,33 @@ class ActuatorNoise(gym.Wrapper):
 
         super().__init__(env)
 
+        self._base_noise_std = float(noise_std)
         self._noise_std = float(noise_std)
 
         if not (0.0 < lag_alpha <= 1.0):
 
             raise ValueError("lag_alpha must be in (0, 1]")
 
+        self._base_alpha = float(lag_alpha)
         self._alpha = float(lag_alpha)
+        self._scale = 1.0
         self._clip = bool(clip)
         self._rng = np.random.default_rng(seed)
 
         self._prev_action = None
+
+    def set_scale(self, scale):
+        """Scale actuator corruption magnitude by factor in [0, 1].
+
+        At scale=0: noise_std=0 and alpha=1 (no noise, no lag -- matches v22
+        training regime). At scale=1: full production corruption.
+        """
+
+        s = float(np.clip(scale, 0.0, 1.0))
+        self._scale = s
+        self._noise_std = self._base_noise_std * s
+        # alpha interpolates 1.0 (no lag) -> base_alpha (full lag)
+        self._alpha = 1.0 - (1.0 - self._base_alpha) * s
 
     def reset(self, **kwargs):
 
