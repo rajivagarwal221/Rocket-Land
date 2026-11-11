@@ -76,8 +76,23 @@ class SensorNoise(gym.Wrapper):
                 f"{obs_dim}-dim."
             )
 
-        self._noise_std = noise_std
+        self._base_noise_std = noise_std.copy()
+        self._noise_std = noise_std.copy()
+        self._scale = 1.0
         self._rng = np.random.default_rng(seed)
+
+    def set_scale(self, scale):
+        """Scale noise magnitude by factor in [0, 1].
+
+        Used by the v23 curriculum callback to ramp noise from 0 (clean,
+        v22-equivalent state) up to full production level gradually,
+        so the warm-started policy adapts without a catastrophic
+        performance drop at step 1.
+        """
+
+        s = float(np.clip(scale, 0.0, 1.0))
+        self._scale = s
+        self._noise_std = (self._base_noise_std * s).astype(np.float32)
 
     def _noisy(self, obs):
 
