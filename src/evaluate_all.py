@@ -203,6 +203,48 @@ ENV_PROFILES: dict[str, dict[str, Any]] = {
             "angular_stability_omega": 0.05,
         },
     },
+
+    "v23": {
+        "base": {
+            "gravity": -10.0,
+            "gravity_range": (-11.5, -1.5),
+            "wind_power_range": (0.0, 12.0),
+            "turbulence_range": (0.0, 0.8),
+            "wind_probability": 0.5,
+            "target_width_range": (0.10, 0.25),
+            "thrust_scale_range": (0.9, 1.3),
+            "weak_gravity_prob": 0.50,
+            "weak_gravity_cutoff": -5.0,
+            "continuous": True,
+        },
+        "shield_default": True,
+        "shield": {
+            "y_trigger": 0.45,
+            "vy_trigger": -0.55,
+            "main_thrust": 1.0,
+            "angle_limit": 0.6,
+        },
+        "target": {
+            "gamma": 0.99,
+            "step_penalty": 0.01,
+            "target_bonus": 300.0,
+            "off_target_penalty": 60.0,
+            "timeout_penalty": 200.0,
+            "failed_landing_penalty": 500.0,
+            "target_limit": 0.15,
+            "x_shaping_coef": 3.5,
+            "x_shaping_fade_below": 0.12,
+            "angular_stability_bonus": 50.0,
+            "angular_stability_angle": 0.15,
+            "angular_stability_omega": 0.05,
+        },
+        "noise": {
+            "obs_noise_std": [0.010, 0.010, 0.015, 0.015, 0.009, 0.010, 0.0, 0.0, 0.0],
+            "obs_delay_steps": 2,
+            "act_noise_std": 0.02,
+            "act_lag_alpha": 0.5,
+        },
+    },
 }
 
 
@@ -375,6 +417,7 @@ def infer_profile(model_path: Path) -> str:
     stem = model_path.stem.lower()
 
     for token, profile in (
+        ("v23", "v23"),
         ("v22", "v22"),
         ("v21", "v21"),
         ("v20", "v20"),
@@ -807,6 +850,13 @@ def run(
 
             print(
                 "[warning] V22 was trained with SafetyShield. "
+                "This is a no-shield ablation test."
+            )
+
+        if profile == "v23" and not effective_shield:
+
+            print(
+                "[warning] V23 was trained with SafetyShield. "
                 "This is a no-shield ablation test."
             )
 
@@ -1380,7 +1430,8 @@ def main() -> None:
             "v19b",
             "v20",
             "v21",
-            "v22"
+            "v22",
+            "v23"
         ),
         default="auto"
     )
