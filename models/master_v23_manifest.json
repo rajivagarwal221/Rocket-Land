@@ -1,0 +1,66 @@
+{
+  "env": {
+    "act_lag_alpha": 0.5,
+    "act_noise_std": 0.02,
+    "base_wrappers": [
+      "ThrustScaledLunarLander",
+      "SafetyShield",
+      "ObservationDelay",
+      "SensorNoise",
+      "TimeLimit",
+      "TargetLandingWrapper",
+      "Monitor"
+    ],
+    "max_episode_steps": 1000,
+    "obs_delay_steps": 2,
+    "obs_noise_std": [
+      0.009999999776482582,
+      0.009999999776482582,
+      0.014999999664723873,
+      0.014999999664723873,
+      0.008999999612569809,
+      0.009999999776482582,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "hparams": {
+    "batch_size": 256,
+    "buffer_size": 1000000,
+    "gamma": 0.99,
+    "gradient_steps": 1,
+    "learning_rate": 5e-05,
+    "learning_starts": 10000,
+    "max_episode_steps": 1000,
+    "reward": {
+      "angular_stability_bonus": 50.0,
+      "failed_landing_penalty": 500.0,
+      "off_target_penalty": 60.0,
+      "target_bonus": 300.0,
+      "timeout_penalty": 200.0,
+      "x_shaping_coef": 3.5,
+      "x_shaping_fade_below": 0.12
+    },
+    "tau": 0.005,
+    "total_steps_target": 2500000,
+    "train_freq": 1,
+    "weak_gravity_prob": 0.5
+  },
+  "model_bytes": 3094243,
+  "model_path": "master_v23_production.zip",
+  "model_sha256": "c94de1d21384775dfd8e9ea695432572a67a8fcf337ec5f8d1ff404f84d97fc0",
+  "seed": 2342,
+  "software": {
+    "cuda_device_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "device": "cuda",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.5",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.14.1+cu130"
+  },
+  "total_timesteps": 300000,
+  "written_at_utc": "2026-11-11T08:46:06.897828+00:00"
+}
