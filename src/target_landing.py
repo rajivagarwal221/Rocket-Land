@@ -26,12 +26,19 @@ class TargetLandingWrapper(gym.Wrapper):
         commit_penalty_after=0,           # step index after which step_penalty triples
         commit_penalty_height=0.3,        # ...when env obs y (altitude) exceeds this
         commit_penalty_scale=3.0,         # multiplier applied to step_penalty when active
-        x_shaping_coef=0.0,               # per-step -k * x^2 * ground_proximity (0 = off)
-        # --- V22 stability knobs (backward-compatible: defaults preserve V21) ---
-        x_shaping_fade_below=0.0,         # altitude (normalized) below which x-shaping fades to 0 (0 = off)
-        angular_stability_bonus=0.0,      # extra terminal bonus for both-leg landing with low angle & omega (0 = off)
-        angular_stability_angle=0.15,     # |angle| threshold (rad)
-        angular_stability_omega=0.05,     # |omega| threshold
+        x_shaping_coef=0.0,
+        x_shaping_fade_below=0.0,
+        angular_stability_bonus=0.0,
+        angular_stability_angle=0.15,
+        angular_stability_omega=0.05,
+        # --- V24 Gaudet-grounded knobs (backward-compatible: defaults preserve V23) ---
+        gamma_shaping=None,
+        fuel_penalty_coef=0.0,
+        fuel_lateral_weight=0.5,
+        glideslope_penalty_coef=0.0,
+        glideslope_ratio_threshold=2.0,
+        glideslope_altitude=0.15,
+        hard_attitude_limit=None,
     ):
 
         super().__init__(env)
@@ -65,6 +72,25 @@ class TargetLandingWrapper(gym.Wrapper):
         self.angular_stability_bonus = float(angular_stability_bonus)
         self.angular_stability_angle = float(angular_stability_angle)
         self.angular_stability_omega = float(angular_stability_omega)
+
+        # V24 Gaudet-grounded knobs
+        self.gamma_shaping = (
+            float(gamma_shaping) if gamma_shaping is not None else float(gamma)
+        )
+        self.fuel_penalty_coef = float(fuel_penalty_coef)
+        self.fuel_lateral_weight = float(fuel_lateral_weight)
+        self.glideslope_penalty_coef = float(glideslope_penalty_coef)
+        self.glideslope_ratio_threshold = float(glideslope_ratio_threshold)
+        self.glideslope_altitude = float(glideslope_altitude)
+        self.hard_attitude_limit = (
+            float(hard_attitude_limit)
+            if hard_attitude_limit is not None
+            else None
+        )
+
+        self.fuel_used_episode = 0.0
+        self.hard_attitude_violation = False
+        self._last_action = None
 
     # =====================================
     # PREDICT LANDING POSITION - V4
@@ -228,6 +254,9 @@ class TargetLandingWrapper(gym.Wrapper):
 
         self.stable_contact_steps = 0
         self.steps_in_episode = 0
+        self.fuel_used_episode = 0.0
+        self.hard_attitude_violation = False
+        self._last_action = None
 
         self.prev_potential = self.potential(
             observation
@@ -240,6 +269,9 @@ class TargetLandingWrapper(gym.Wrapper):
     # =====================================
 
     def step(self, action):
+
+        import numpy as _np_v24
+        self._last_action = _np_v24.asarray(action, dtype=float).reshape(-1)
 
         (
             observation,
@@ -401,8 +433,11 @@ class TargetLandingWrapper(gym.Wrapper):
                 observation
             )
 
+        # V24: Ng 1999 potential-based shaping with Gaudet 2020's separate discount
+        # for the shaping term. F = gamma_shaping * Phi(s') - Phi(s) preserves the
+        # Ng invariance theorem for the shaping component.
         shaping_reward = (
-            self.gamma * next_potential
+            self.gamma_shaping * next_potential
             - self.prev_potential
         )
 
@@ -457,6 +492,59 @@ class TargetLandingWrapper(gym.Wrapper):
             )
 
         # ---------------------------------
+        # V24 FUEL PENALTY (Gaudet 2020)
+        # Linear cost on commanded thrust magnitude per step.
+        # ---------------------------------
+
+        fuel_reward = 0.0
+        if self.fuel_penalty_coef > 0.0 and self._last_action is not None:
+            a = self._last_action
+            main_cost = abs(float(a[0])) if a.size >= 1 else 0.0
+            side_cost = abs(float(a[1])) if a.size >= 2 else 0.0
+            step_fuel = (
+                main_cost + self.fuel_lateral_weight * side_cost
+            )
+            self.fuel_used_episode += step_fuel
+            fuel_reward = -self.fuel_penalty_coef * step_fuel
+
+        # ---------------------------------
+        # V24 GLIDESLOPE PENALTY (Gaudet 2020)
+        # Penalises |vx|/|vy| ratio during the final descent metres.
+        # ---------------------------------
+
+        glideslope_reward = 0.0
+        if (
+            self.glideslope_penalty_coef > 0.0
+            and not terminated
+            and 0.0 < y < self.glideslope_altitude
+        ):
+            vx_abs = abs(float(observation[2]))
+            vy_abs = max(abs(float(observation[3])), 0.01)
+            ratio = vx_abs / vy_abs
+            if ratio > self.glideslope_ratio_threshold:
+                glideslope_reward = -(
+                    self.glideslope_penalty_coef
+                    * (ratio - self.glideslope_ratio_threshold)
+                )
+
+        # ---------------------------------
+        # V24 HARD ATTITUDE CONSTRAINT (Gaudet 2020)
+        # |angle| > limit terminates the episode as a crash.
+        # ---------------------------------
+
+        if (
+            self.hard_attitude_limit is not None
+            and abs(float(observation[4])) > self.hard_attitude_limit
+            and not terminated
+        ):
+            terminated = True
+            truncated = False
+            self.hard_attitude_violation = True
+            base_reward = -self.failed_landing_penalty
+            terminal_bonus = 0.0
+            landing_status = "HARD_ATTITUDE_VIOLATION"
+
+        # ---------------------------------
         # FINAL REWARD
         # ---------------------------------
 
@@ -467,6 +555,8 @@ class TargetLandingWrapper(gym.Wrapper):
             + timeout_reward
             + time_reward
             + x_shaping_reward
+            + fuel_reward
+            + glideslope_reward
         )
 
         # ---------------------------------
@@ -498,6 +588,12 @@ class TargetLandingWrapper(gym.Wrapper):
         info["terminal_bonus"] = float(terminal_bonus)
 
         info["timeout_reward"] = float(timeout_reward)
+
+        info["fuel_used_episode"] = float(self.fuel_used_episode)
+        info["fuel_reward"] = float(fuel_reward)
+        info["glideslope_reward"] = float(glideslope_reward)
+        info["hard_attitude_violation"] = bool(self.hard_attitude_violation)
+        info["active_target_limit"] = float(self.target_limit)
 
         return (
             observation,
