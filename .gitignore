@@ -50,3 +50,15 @@ models/*.onnx
 logs/
 tensorboard/
 checkpoints/
+
+# Rocket-Land RL checkpoints
+models/*.pkl
+models/*.zip
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Training outputs
+logs/
+tensorboard/
+checkpoints/
