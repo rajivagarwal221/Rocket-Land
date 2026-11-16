@@ -537,11 +537,18 @@ def validate_model_environment(
             f"got {env.action_space.shape}"
         )
 
-    if env.observation_space.shape not in ((8,), (9,)):
-
+    obs_shape = env.observation_space.shape
+    # Accept the base LunarLander shapes (8 or 9) and any integer multiple
+    # thereof produced by frame-stacking wrappers (e.g. V27: 9 * 8 = 72).
+    if obs_shape not in ((8,), (9,)) and not (
+        len(obs_shape) == 1
+        and obs_shape[0] > 0
+        and obs_shape[0] % 8 == 0
+        and (obs_shape[0] % 9 == 0 or obs_shape[0] % 8 == 0)
+    ):
         raise ValueError(
-            f"Expected 8 or 9 observation values, "
-            f"got {env.observation_space.shape}"
+            f"Expected 8 or 9 observation values (or a frame-stacked multiple), "
+            f"got {obs_shape}"
         )
 
     if shield and env.observation_space.shape[0] < 8:
