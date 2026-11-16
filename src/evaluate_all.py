@@ -365,6 +365,46 @@ OUTCOMES = (
 # MODEL LOADING
 # ============================================================
 
+class FrameStackFlat(gym.ObservationWrapper):
+    """SB3 VecFrameStack-equivalent for a single gym.Env with 1-D obs.
+
+    Buffer starts as zeros; the first real obs lands in the LAST slot,
+    matching StackedObservations.reset() in stable_baselines3.common.
+    Each subsequent obs shifts the buffer left and appends at the end.
+    """
+
+    def __init__(self, env, n_stack: int = 8):
+        super().__init__(env)
+        if len(env.observation_space.shape) != 1:
+            raise ValueError(
+                "FrameStackFlat requires 1-D observations; got "
+                f"{env.observation_space.shape}"
+            )
+        self._n = int(n_stack)
+        self._d = int(env.observation_space.shape[0])
+        import numpy as _np
+        low = _np.tile(env.observation_space.low, self._n)
+        high = _np.tile(env.observation_space.high, self._n)
+        self.observation_space = gym.spaces.Box(
+            low=low, high=high, dtype=env.observation_space.dtype
+        )
+        self._buf = _np.zeros(self._n * self._d, dtype=env.observation_space.dtype)
+
+    def reset(self, **kwargs):
+        import numpy as _np
+        obs, info = self.env.reset(**kwargs)
+        self._buf = _np.zeros(self._n * self._d, dtype=self.observation_space.dtype)
+        self._buf[-self._d:] = obs
+        return self._buf.copy(), info
+
+    def observation(self, obs):
+        import numpy as _np
+        self._buf = _np.concatenate(
+            [self._buf[self._d:], obs]
+        ).astype(self.observation_space.dtype)
+        return self._buf.copy()
+
+
 def load_model(path: Path, device: str = "cpu"):
     """
     Automatically detect SAC or PPO from the checkpoint itself.
@@ -907,6 +947,27 @@ def run(
         render=render,
         shield=effective_shield
     )
+
+    try:
+        model_obs_shape = tuple(model.observation_space.shape)
+        env_obs_shape = tuple(env.observation_space.shape)
+    except Exception:
+        model_obs_shape = env_obs_shape = None
+
+    if (
+        model_obs_shape is not None
+        and env_obs_shape is not None
+        and len(model_obs_shape) == 1
+        and len(env_obs_shape) == 1
+        and model_obs_shape[0] > env_obs_shape[0]
+        and model_obs_shape[0] % env_obs_shape[0] == 0
+    ):
+        n_stack = model_obs_shape[0] // env_obs_shape[0]
+        env = FrameStackFlat(env, n_stack=n_stack)
+        print(
+            f"[eval] auto-wrapped env with FrameStackFlat(n_stack={n_stack}) "
+            f"to match model obs {model_obs_shape}."
+        )
 
     results: list[dict[str, Any]] = []
 
