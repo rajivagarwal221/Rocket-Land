@@ -964,6 +964,10 @@ def run(
     ):
         n_stack = model_obs_shape[0] // env_obs_shape[0]
         env = FrameStackFlat(env, n_stack=n_stack)
+        try:
+            env.observation_space = model.observation_space
+        except Exception:
+            pass
         print(
             f"[eval] auto-wrapped env with FrameStackFlat(n_stack={n_stack}) "
             f"to match model obs {model_obs_shape}."
