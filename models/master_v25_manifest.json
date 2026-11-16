@@ -1,0 +1,100 @@
+{
+  "env_wrapper_stack_inside_out": [
+    "ThrustScaledLunarLander",
+    "ActuatorNoise (scale=1.0)",
+    "SafetyShield (post_posed)",
+    "ObservationDelay",
+    "SensorNoise (scale=1.0)",
+    "TimeLimit",
+    "TargetLandingWrapper",
+    "Monitor"
+  ],
+  "hparams": {
+    "batch_size": 256,
+    "buffer_size": 1000000,
+    "curriculum": {
+      "auto_curriculum": {
+        "high_threshold": 0.98,
+        "initial_weak_gravity_prob": 0.55,
+        "low_threshold": 0.92,
+        "max_prob": 0.7,
+        "min_prob": 0.4,
+        "step": 0.03
+      },
+      "eval_target_limit": 0.08,
+      "target_limit_anneal_end_step": 800000,
+      "target_limit_anneal_start_step": 300000,
+      "target_limit_final": 0.08,
+      "target_limit_start": 0.12
+    },
+    "design_notes": [
+      "V23 reward unchanged.",
+      "Glideslope + hard-attitude added as non-invasive defensive knobs.",
+      "Fuel penalty OFF (V24 regression cause).",
+      "gamma_shaping == gamma (V24 regression cause).",
+      "Full noise scale from step 0 (V23 already adapted).",
+      "Target-limit anneal tightened to 0.12 -> 0.08.",
+      "Auto-curriculum ON with conservative thresholds."
+    ],
+    "gamma": 0.99,
+    "gamma_shaping": 0.99,
+    "gradient_steps": 1,
+    "learning_rate_end": 1e-06,
+    "learning_rate_schedule": "linear",
+    "learning_rate_start": 3e-05,
+    "learning_starts": 3000,
+    "max_episode_steps": 1000,
+    "noise_production": {
+      "act_lag_alpha": 0.5,
+      "act_noise_std": 0.02,
+      "init_scale": 1.0,
+      "obs_delay_steps": 2,
+      "obs_noise_std": [
+        0.009999999776482582,
+        0.009999999776482582,
+        0.014999999664723873,
+        0.014999999664723873,
+        0.008999999612569809,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "reward": {
+      "angular_stability_angle": 0.15,
+      "angular_stability_bonus": 100.0,
+      "angular_stability_omega": 0.05,
+      "failed_landing_penalty": 500.0,
+      "fuel_penalty_coef": 0.0,
+      "glideslope_altitude": 0.1,
+      "glideslope_penalty_coef": 3.0,
+      "glideslope_ratio_threshold": 2.5,
+      "hard_attitude_limit": 1.3,
+      "off_target_penalty": 120.0,
+      "target_bonus": 500.0,
+      "timeout_penalty": 200.0,
+      "x_shaping_coef": 4.5,
+      "x_shaping_fade_below": 0.12
+    },
+    "tau": 0.005,
+    "total_steps_target": 1500000,
+    "train_freq": 1
+  },
+  "model_bytes": 3096902,
+  "model_path": "master_v25_surgical.zip",
+  "model_sha256": "a17ab9e04e12106333e6b10b5f8c150c16fb110982720499579628066229fd1a",
+  "seed": 2542,
+  "software": {
+    "cuda_device_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "device": "cuda",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.5",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.14.1+cu130"
+  },
+  "total_timesteps": 1500000,
+  "written_at_utc": "2026-11-12T20:39:37.225165+00:00"
+}

@@ -1,0 +1,102 @@
+{
+  "env_wrapper_stack_inside_out": [
+    "ThrustScaledLunarLander",
+    "ActuatorNoise",
+    "SafetyShield (post_posed, LTL-specified)",
+    "ObservationDelay",
+    "SensorNoise",
+    "TimeLimit",
+    "TargetLandingWrapper (Ng shaping + Gaudet terminal bonuses)",
+    "Monitor"
+  ],
+  "hparams": {
+    "batch_size": 256,
+    "buffer_size": 1000000,
+    "curriculum": {
+      "auto_curriculum": {
+        "high_threshold": 0.95,
+        "initial_weak_gravity_prob": 0.55,
+        "low_threshold": 0.8,
+        "max_prob": 0.75,
+        "min_prob": 0.3
+      },
+      "eval_target_limit": 0.1,
+      "noise_anneal_end_step": 1400000,
+      "noise_anneal_start_step": 350000,
+      "target_limit_anneal_end_step": 1400000,
+      "target_limit_anneal_start_step": 700000,
+      "target_limit_final": 0.1,
+      "target_limit_start": 0.15
+    },
+    "gamma": 0.99,
+    "gamma_shaping": 0.95,
+    "gradient_steps": 1,
+    "learning_rate_end": 5e-06,
+    "learning_rate_schedule": "linear",
+    "learning_rate_start": 5e-05,
+    "learning_starts": 5000,
+    "max_episode_steps": 1000,
+    "noise_production": {
+      "act_lag_alpha": 0.5,
+      "act_noise_std": 0.02,
+      "obs_delay_steps": 2,
+      "obs_noise_std": [
+        0.009999999776482582,
+        0.009999999776482582,
+        0.014999999664723873,
+        0.014999999664723873,
+        0.008999999612569809,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "paper_citations": [
+      "Ng et al. 1999 -- potential-based shaping",
+      "Schulman et al. 2017 -- PPO (predecessor family; V24 uses SAC)",
+      "Raffin et al. 2021 -- Stable-Baselines3",
+      "Peng et al. 2018 -- dynamics randomization, obs/action noise",
+      "Narvekar et al. 2020 -- curriculum learning survey",
+      "Alshiekh et al. 2018 -- safe RL via shielding",
+      "Gaudet et al. 2020 -- 6-DOF rocket landing (two-discount, fuel, glideslope, attitude)",
+      "Towers et al. 2024 -- Gymnasium"
+    ],
+    "reward": {
+      "angular_stability_angle": 0.15,
+      "angular_stability_bonus": 100.0,
+      "angular_stability_omega": 0.05,
+      "failed_landing_penalty": 500.0,
+      "fuel_lateral_weight": 0.5,
+      "fuel_penalty_coef": 0.05,
+      "glideslope_altitude": 0.12,
+      "glideslope_penalty_coef": 5.0,
+      "glideslope_ratio_threshold": 2.0,
+      "hard_attitude_limit": 1.2,
+      "off_target_penalty": 120.0,
+      "target_bonus": 500.0,
+      "timeout_penalty": 200.0,
+      "x_shaping_coef": 4.5,
+      "x_shaping_fade_below": 0.12
+    },
+    "tau": 0.005,
+    "total_steps_target": 2000000,
+    "train_freq": 1
+  },
+  "model_bytes": 3096898,
+  "model_path": "master_v24_best.zip",
+  "model_sha256": "020dd493046394984812e6d0ab8b1d0140e6975756349683ae65aedffd652450",
+  "seed": 2442,
+  "software": {
+    "cuda_device_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "device": "cuda",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.5",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.14.1+cu130"
+  },
+  "total_timesteps": 2000000,
+  "written_at_utc": "2026-11-12T02:50:58.737272+00:00"
+}
