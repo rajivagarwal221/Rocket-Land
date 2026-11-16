@@ -26,3 +26,15 @@ Thumbs.db
 
 # Local tooling
 .claude/
+
+# Reinforcement Learning Checkpoints
+models/*.pkl
+models/*.zip
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Training outputs
+logs/
+tensorboard/
+checkpoints/
