@@ -1,0 +1,98 @@
+{
+  "env_wrapper_stack_inside_out": [
+    "ThrustScaledLunarLander",
+    "ActuatorNoise",
+    "SafetyShield",
+    "ObservationDelay",
+    "SensorNoise",
+    "TimeLimit",
+    "TargetLandingWrapper",
+    "CurriculumProxy",
+    "Monitor",
+    "SubprocVecEnv",
+    "VecFrameStack(n_stack=8)",
+    "VecMonitor"
+  ],
+  "hparams": {
+    "architecture": {
+      "activation": "ReLU",
+      "n_envs": 4,
+      "n_stack": 8,
+      "net_arch_pi": [
+        512,
+        512
+      ],
+      "net_arch_qf": [
+        512,
+        512
+      ],
+      "vec_env": "SubprocVecEnv"
+    },
+    "batch_size": 512,
+    "buffer_size": 2000000,
+    "curriculum": {
+      "eval_target_limit": 0.1,
+      "phase1_end_frac": 0.25,
+      "phase2_end_frac": 0.625,
+      "target_limit_end": 0.1,
+      "target_limit_mid": 0.1,
+      "target_limit_start": 0.15,
+      "weak_g_prob_end": 0.65,
+      "weak_g_prob_mid": 0.55,
+      "weak_g_prob_start": 0.35
+    },
+    "gamma": 0.99,
+    "gradient_steps": 2,
+    "learning_rate_end": 1e-05,
+    "learning_rate_schedule": "cosine",
+    "learning_rate_start": 0.0003,
+    "learning_starts": 10000,
+    "max_episode_steps": 1000,
+    "noise_production": {
+      "act_lag_alpha": 0.5,
+      "act_noise_std": 0.02,
+      "obs_delay_steps": 2,
+      "obs_noise_std": [
+        0.009999999776482582,
+        0.009999999776482582,
+        0.014999999664723873,
+        0.014999999664723873,
+        0.008999999612569809,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "reward": {
+      "angular_stability_angle": 0.15,
+      "angular_stability_bonus": 100.0,
+      "angular_stability_omega": 0.05,
+      "failed_landing_penalty": 500.0,
+      "off_target_penalty": 120.0,
+      "target_bonus": 500.0,
+      "timeout_penalty": 200.0,
+      "x_shaping_coef": 4.5,
+      "x_shaping_fade_below": 0.12
+    },
+    "tau": 0.005,
+    "total_steps_target": 8000000,
+    "train_freq": 4
+  },
+  "model_bytes": 13336453,
+  "model_path": "master_v27_production.zip",
+  "model_sha256": "01578cd62ed06e8acac978beafa315a051715e22439b5515c00485a8f3501cac",
+  "seed": 7474,
+  "software": {
+    "cuda_device_name": "Tesla T4",
+    "device": "cuda",
+    "gymnasium": "1.4.0",
+    "numpy": "2.4.6",
+    "platform": "Linux-6.6.159+-x86_64-with-glibc2.39",
+    "python": "3.13.16",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.14.1+cu130"
+  },
+  "total_timesteps": 6400000,
+  "written_at_utc": "2026-11-16T01:38:34.129722+00:00"
+}
