@@ -1,0 +1,74 @@
+<mujoco model="rocket_lander_3d">
+  <!--
+    6-DOF rocket lander. One rigid body on a free joint, four landing legs,
+    a gimballed engine at the base and a small roll thruster.
+
+    The engine is three force motors on the "engine" site (site frame = body
+    frame), so the thrust vector turns with the vehicle. rocket_env.py writes
+    the body-frame force components into ctrl every physics step.
+
+    Mass and inertia are set explicitly here and overwritten per episode by
+    the environment's domain randomization, so geoms carry no mass.
+  -->
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <visual>
+    <global offwidth="960" offheight="720"/>
+    <quality shadowsize="4096"/>
+    <headlight ambient="0.35 0.35 0.35" diffuse="0.6 0.6 0.6"/>
+    <rgba haze="0.55 0.68 0.85 1"/>
+  </visual>
+
+  <asset>
+    <texture name="sky" type="skybox" builtin="gradient" rgb1="0.45 0.62 0.85" rgb2="0.08 0.10 0.18" width="256" height="1536"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.26 0.28 0.30" rgb2="0.21 0.23 0.25" width="256" height="256" mark="edge" markrgb="0.4 0.4 0.4"/>
+    <material name="grid" texture="grid" texrepeat="30 30" reflectance="0.05"/>
+    <material name="hull" rgba="0.92 0.92 0.94 1" specular="0.6" shininess="0.6"/>
+    <material name="leg" rgba="0.12 0.12 0.13 1"/>
+  </asset>
+
+  <default>
+    <geom condim="3" friction="1.0 0.02 0.001"/>
+    <motor ctrllimited="false"/>
+  </default>
+
+  <worldbody>
+    <light name="sun" pos="0 0 40" dir="0.2 0.2 -1" directional="true" diffuse="0.7 0.7 0.7" castshadow="false"/>
+    <!-- Follows the vehicle so its shadow on the ground shows height and drift. -->
+    <light name="follow" mode="trackcom" pos="0 0 20" dir="0 0 -1" cutoff="20" diffuse="0.35 0.35 0.35"/>
+    <!-- wide: fixed view of the whole descent. chase: rides alongside the vehicle. -->
+    <body name="aim" pos="0 0 4.5"/>
+    <camera name="wide" pos="15 -15 6" mode="targetbody" target="aim" fovy="46"/>
+    <camera name="chase" pos="3.5 -3.5 10.5" mode="trackcom" xyaxes="0.707 0.707 0 -0.071 0.071 0.995" fovy="45"/>
+
+    <geom name="ground" type="plane" size="40 40 0.1" material="grid"/>
+    <!-- Visual only: radius is synced to the active target radius when rendering. -->
+    <geom name="pad" type="cylinder" size="0.5 0.003" pos="0 0 0.003" rgba="0.95 0.55 0.10 0.55" contype="0" conaffinity="0"/>
+
+    <body name="rocket" pos="0 0 10">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="1.5" diaginertia="0.085 0.085 0.004"/>
+
+      <geom name="fuselage" type="cylinder" size="0.04 0.40" material="hull"/>
+      <geom name="nose" type="ellipsoid" size="0.04 0.04 0.10" pos="0 0 0.40" material="hull"/>
+
+      <geom name="leg0" type="capsule" fromto=" 0.04  0    -0.30   0.28  0    -0.52" size="0.012" material="leg"/>
+      <geom name="leg1" type="capsule" fromto="-0.04  0    -0.30  -0.28  0    -0.52" size="0.012" material="leg"/>
+      <geom name="leg2" type="capsule" fromto=" 0     0.04 -0.30   0     0.28 -0.52" size="0.012" material="leg"/>
+      <geom name="leg3" type="capsule" fromto=" 0    -0.04 -0.30   0    -0.28 -0.52" size="0.012" material="leg"/>
+
+      <!-- Visual only: length and opacity follow the throttle when rendering. -->
+      <geom name="flame" type="capsule" fromto="0 0 -0.42 0 0 -0.70" size="0.022" rgba="1.0 0.62 0.12 0.6" contype="0" conaffinity="0"/>
+
+      <site name="engine" pos="0 0 -0.40" size="0.01"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="thrust_x" site="engine" gear="1 0 0 0 0 0"/>
+    <motor name="thrust_y" site="engine" gear="0 1 0 0 0 0"/>
+    <motor name="thrust_z" site="engine" gear="0 0 1 0 0 0"/>
+    <motor name="roll"     site="engine" gear="0 0 0 0 0 1"/>
+  </actuator>
+</mujoco>
