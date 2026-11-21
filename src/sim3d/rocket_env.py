@@ -103,13 +103,16 @@ class EnvConfig:
     gust_tau: float = 1.0
 
     # Touchdown and safety limits.
-    max_touchdown_speed: float = 2.0
-    tip_angle: float = 1.05         # rad (60 deg)
+    max_touchdown_speed: float = 1.5   # firmer: harder bounces -> CRASH instead of 'maybe retry'
+    tip_angle: float = 1.05            # rad (60 deg)
     bounds_xy: float = 20.0
     bounds_z: float = 30.0
-    settle_steps: int = 15
-    settle_speed: float = 0.15
-    settle_omega: float = 0.3
+    settle_steps: int = 5              # 15 was unreachable under noise
+    settle_speed: float = 0.4          # "soft touchdown" instead of "parked"
+    settle_omega: float = 0.6
+    settle_legs: int = 2               # legs>=3 was impossible with wind/lag
+    post_contact_deadline: int = 100   # kills the bounce-forever loop
+    pos_clip_m: float = 5.0            # cap distance potential so near-pad is a plateau
 
     # Reward.
     target_radius: float = 0.5
@@ -120,15 +123,16 @@ class EnvConfig:
     vel_scale: float = 5.0
     w_tilt: float = 100.0
     w_omega: float = 10.0
-    w_legs: float = 40.0
-    step_penalty: float = 0.01
+    w_legs: float = 0.0                # was 40; made hover-with-leg-scraping profitable
+    step_penalty: float = 0.02         # mild hover tax
     action_rate_coef: float = 0.02
+    descent_commit_bonus: float = 0.5  # +/step while committing: alt<2, offset<1, vz<-0.2
     landed_reward: float = 100.0
     target_bonus: float = 500.0
     off_target_penalty: float = 120.0
     soft_touchdown_bonus: float = 100.0
     crash_penalty: float = 400.0
-    timeout_penalty: float = 400.0
+    timeout_penalty: float = 800.0     # was 400; hover-to-timeout must be strictly worse than attempting
     oob_penalty: float = 500.0
 
 
@@ -296,7 +300,7 @@ class Rocket3DEnv(gym.Env):
     def _potential(self, k: Kinematics, legs: int) -> float:
         c = self.cfg
         lat = c.lateral_weight * math.hypot(k.pos[0], k.pos[1])
-        dist = math.hypot(lat, max(k.alt, 0.0))
+        dist = min(math.hypot(lat, max(k.alt, 0.0)), c.pos_clip_m)
         speed = float(np.linalg.norm(k.v_world))
         return (
             -c.w_pos * dist / c.pos_scale
@@ -384,6 +388,7 @@ class Rocket3DEnv(gym.Env):
         self._impact_speed = 0.0
         self._impact_tilt = 0.0
         self._settle = 0
+        self._since_touch = 0
 
         self.episode_meta = {
             "mass_scale": float(mass_scale),
@@ -458,6 +463,8 @@ class Rocket3DEnv(gym.Env):
             self._touched = True
             self._impact_speed = speed_before
             self._impact_tilt = k.tilt
+        if self._touched:
+            self._since_touch += 1
 
         outcome = None
         if not np.isfinite(d.qpos).all() or not np.isfinite(d.qvel).all():
@@ -474,12 +481,19 @@ class Rocket3DEnv(gym.Env):
             outcome = "OUT_OF_BOUNDS"
         else:
             settled = (
-                legs >= 3
+                legs >= c.settle_legs
                 and float(np.linalg.norm(k.v_world)) < c.settle_speed
                 and float(np.linalg.norm(k.omega)) < c.settle_omega
             )
             self._settle = self._settle + 1 if settled else 0
             if self._settle >= c.settle_steps:
+                error = math.hypot(k.pos[0], k.pos[1])
+                outcome = "PRECISE" if error <= self.target_radius else "SAFE_OUTSIDE"
+            elif (
+                self._touched
+                and self._since_touch >= c.post_contact_deadline
+            ):
+                # After first contact the episode MUST resolve. Bouncing forever is not an option.
                 error = math.hypot(k.pos[0], k.pos[1])
                 outcome = "PRECISE" if error <= self.target_radius else "SAFE_OUTSIDE"
 
@@ -497,6 +511,11 @@ class Rocket3DEnv(gym.Env):
         phi = self._potential(k, legs)
         reward = c.gamma * phi - self._prev_phi - c.step_penalty
         reward -= c.action_rate_coef * float(np.mean((a - self._prev_action) ** 2))
+        # Pay the policy for committing to a descent near the pad: it fights the
+        # tendency to hover and collect shaping.
+        offset_m = math.hypot(k.pos[0], k.pos[1])
+        if k.alt < 2.0 and offset_m < 1.0 and k.v_world[2] < -0.2:
+            reward += c.descent_commit_bonus
         self._prev_phi = phi
         self._prev_action = a
 

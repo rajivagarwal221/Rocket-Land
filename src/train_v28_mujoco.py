@@ -303,11 +303,14 @@ class EvalCB(BaseCallback):
     def __init__(self, eval_vec):
         super().__init__()
         self._vec = eval_vec
-        self._best = (-1.0, -math.inf)
+        self._best = (-1.0, -1.0, -math.inf)
         if EVAL_HISTORY.exists() and not FRESH:
             for line in EVAL_HISTORY.read_text(encoding="utf-8").splitlines():
                 row = json.loads(line)
-                self._best = max(self._best, (row["precise_rate"], row["mean_return"]))
+                self._best = max(
+                    self._best,
+                    (row["safe_rate"], row["precise_rate"], row["mean_return"]),
+                )
 
     def _on_training_start(self):
         self._last = self.model.num_timesteps
@@ -324,7 +327,9 @@ class EvalCB(BaseCallback):
         self.logger.record("eval/precise_rate", result["precise_rate"])
         self.logger.record("eval/safe_rate", result["safe_rate"])
         self.logger.record("eval/mean_return", result["mean_return"])
-        score = (result["precise_rate"], result["mean_return"])
+        # Rank by safe_rate first so a "lands often, sometimes off-pad" checkpoint
+        # beats one that never lands at all. Precise rate breaks the tie.
+        score = (result["safe_rate"], result["precise_rate"], result["mean_return"])
         is_best = score > self._best
         print(
             f"[eval] t={t:,} precise={result['precise_rate']:.1%} "
