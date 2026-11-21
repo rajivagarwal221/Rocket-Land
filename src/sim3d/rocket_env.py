@@ -425,6 +425,19 @@ class Rocket3DEnv(gym.Env):
         d.xfrc_applied[self._bid, :3] = force
         d.xfrc_applied[self._bid, 3:] = np.cross(arm, force)
 
+    def _physics_step(self):
+        mujoco.mj_step(self.model, self.data)
+
+    def _is_settled(self, k, legs):
+        return (
+            legs >= self.cfg.settle_legs
+            and float(np.linalg.norm(k.v_world)) < self.cfg.settle_speed
+            and float(np.linalg.norm(k.omega)) < self.cfg.settle_omega
+        )
+
+    def _contact_deadline_outcome(self, error):
+        return "PRECISE" if error <= self.target_radius else "SAFE_OUTSIDE"
+
     def step(self, action):
         m, d, p, c = self.model, self.data, self.params, self.cfg
         a = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
@@ -453,7 +466,7 @@ class Rocket3DEnv(gym.Env):
             ctrl[1] = force * sy
             ctrl[2] = force * math.sqrt(max(0.0, 1.0 - sx * sx - sy * sy))
             ctrl[3] = roll_torque
-            mujoco.mj_step(m, d)
+            self._physics_step()
 
         self._steps += 1
         k = self.kinematics()
@@ -480,11 +493,7 @@ class Rocket3DEnv(gym.Env):
         ):
             outcome = "OUT_OF_BOUNDS"
         else:
-            settled = (
-                legs >= c.settle_legs
-                and float(np.linalg.norm(k.v_world)) < c.settle_speed
-                and float(np.linalg.norm(k.omega)) < c.settle_omega
-            )
+            settled = self._is_settled(k, legs)
             self._settle = self._settle + 1 if settled else 0
             if self._settle >= c.settle_steps:
                 error = math.hypot(k.pos[0], k.pos[1])
@@ -495,7 +504,7 @@ class Rocket3DEnv(gym.Env):
             ):
                 # After first contact the episode MUST resolve. Bouncing forever is not an option.
                 error = math.hypot(k.pos[0], k.pos[1])
-                outcome = "PRECISE" if error <= self.target_radius else "SAFE_OUTSIDE"
+                outcome = self._contact_deadline_outcome(error)
 
         truncated = False
         if outcome is None and self._steps >= c.max_steps:
