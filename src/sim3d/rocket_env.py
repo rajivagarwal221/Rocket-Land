@@ -389,6 +389,7 @@ class Rocket3DEnv(gym.Env):
         self._impact_tilt = 0.0
         self._settle = 0
         self._since_touch = 0
+        self._air_density = p.air_density
 
         self.episode_meta = {
             "mass_scale": float(mass_scale),
@@ -420,7 +421,7 @@ class Rocket3DEnv(gym.Env):
                 -d.qvel[2],
             ]
         )
-        force = 0.5 * p.air_density * p.drag_area * np.linalg.norm(v_rel) * v_rel
+        force = 0.5 * self._air_density * p.drag_area * np.linalg.norm(v_rel) * v_rel
         arm = d.xmat[self._bid].reshape(3, 3)[:, 2] * p.cp_offset
         d.xfrc_applied[self._bid, :3] = force
         d.xfrc_applied[self._bid, 3:] = np.cross(arm, force)
