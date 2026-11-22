@@ -1,4 +1,5 @@
-"""Seeded V29 classical baseline audit. Never passes simulator truth to control."""
+"""Seeded V29 audit: classical guidance, or guidance plus a trained residual
+(--model). Never passes simulator truth to control."""
 import argparse
 import csv
 import hashlib
@@ -13,29 +14,41 @@ from evaluate_3d import wilson
 from sim3d.guidance import LandingController
 from sim3d.mission import MissionEnv
 from sim3d.mission_wrappers import mission_sensors
+from sim3d.residual import ResidualLandingEnv
 
 
-def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=None, traces=None):
+def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=None, traces=None,
+          dropout=0.0, model=None):
     if episodes <= 0 or delay < 0 or not 0 <= difficulty <= 1:
         raise ValueError('Positive episodes, nonnegative delay, difficulty in [0,1] required')
     raw = MissionEnv(difficulty=difficulty)
-    env = mission_sensors(raw, delay=delay, noise_scale=1.0 if noise else 0.0)
-    controller = LandingController(raw.params)
+    env = mission_sensors(raw, delay=delay, noise_scale=1.0 if noise else 0.0, dropout=dropout)
+    policy = None
+    if model is not None:
+        from stable_baselines3 import SAC
+        policy = SAC.load(str(model), device='cpu')
+        env = ResidualLandingEnv(env)
+        controller = env.controller
+    else:
+        controller = LandingController(raw.params)
     rows = []
     try:
         for ep in range(episodes):
             obs, _ = env.reset(seed=seed+ep)
-            controller.reset()
+            if policy is None:
+                controller.reset()
             total, phases, trace = 0., Counter(), []
             while True:
-                action = controller(obs)
+                phase = controller.phase
+                action = (policy.predict(obs, deterministic=True)[0] if policy is not None
+                          else controller(obs))
                 if traces:
                     k = raw.kinematics()
                     trace.append(dict(time=raw._steps*raw.dt_ctrl, observation=obs.tolist(),
-                                      action=action.tolist(), phase=controller.phase,
+                                      action=action.tolist(), phase=phase,
                                       position=k.pos.tolist(), velocity=k.v_world.tolist(),
                                       tilt=k.tilt))
-                phases[controller.phase] += 1
+                phases[phase] += 1
                 obs, reward, te, tr, info = env.step(action)
                 total += reward
                 if te or tr:
@@ -56,11 +69,13 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
         env.close()
     counts = Counter(r['outcome'] for r in rows)
     rate = counts['PRECISE']/episodes
-    summary = dict(controller='observation-driven classical v29', episodes=episodes,
+    name = f'classical v29 + residual {Path(model).name}' if model else 'observation-driven classical v29'
+    summary = dict(controller=name, episodes=episodes,
                    seed=seed, difficulty=difficulty, delay_steps=delay, noise=noise,
+                   nav_dropout_rate=dropout,
                    outcomes=dict(counts), precise_rate=rate,
                    precise_wilson95=wilson(counts['PRECISE'], episodes),
-                   clean_gate_passed=(difficulty == 0 and delay == 0 and not noise
+                   clean_gate_passed=(difficulty == 0 and delay == 0 and not noise and not dropout
                                       and episodes >= 200 and rate >= .99),
                    params=asdict(raw.params), config=asdict(raw.cfg),
                    xml_sha256=hashlib.sha256(Path(__file__).with_name('sim3d').joinpath('rocket.xml').read_bytes()).hexdigest())
@@ -83,7 +98,12 @@ if __name__ == '__main__':
     p.add_argument('--difficulty', type=float, default=0)
     p.add_argument('--delay', type=int, default=0)
     p.add_argument('--noise', action='store_true')
+    p.add_argument('--dropout', type=float, default=0.0,
+                   help='per-step chance a 20-200 ms position-fix dropout starts (e.g. 0.005)')
     p.add_argument('--out', type=Path)
     p.add_argument('--traces', type=Path, help='save per-step telemetry for failed development episodes')
+    p.add_argument('--model', type=Path, help='trained residual SAC checkpoint (.zip)')
     a = p.parse_args()
-    audit(a.episodes, a.seed, a.difficulty, a.delay, a.noise, a.out, a.traces)
+    if a.model is not None and not a.model.is_file():
+        p.error(f'checkpoint not found: {a.model}')
+    audit(a.episodes, a.seed, a.difficulty, a.delay, a.noise, a.out, a.traces, a.dropout, a.model)

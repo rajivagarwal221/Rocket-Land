@@ -247,5 +247,17 @@ class MissionTests(unittest.TestCase):
         self.assertEqual(e._settle, 0)
 
 
+    def test_nav_dropout_freezes_only_position_fix(self):
+        from sim3d.mission_wrappers import mission_sensors
+        e = mission_sensors(MissionEnv(), dropout=0.999)
+        first, _ = e.reset(seed=9)
+        held, _, _, _, _ = e.step([1, 0.5, 0, 0])
+        np.testing.assert_array_equal(held[:6], first[:6])
+        self.assertFalse(np.array_equal(held[9:12], first[9:12]))
+        again, _ = e.reset(seed=9)
+        np.testing.assert_array_equal(e.step([1, 0.5, 0, 0])[0], held)
+        e.close()
+
+
 if __name__ == '__main__':
     unittest.main()

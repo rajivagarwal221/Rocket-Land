@@ -1,7 +1,7 @@
 """Bounded residual-learning interface; wrap AFTER observation delay/noise.
 
 The 27-value observation includes sensor state (16), the next baseline action
-(4), controller integrals (3) and phase one-hot (4). This exposes controller
+(4), disturbance estimate and descent integral (3) and phase one-hot (4). This exposes controller
 memory without leaking simulator truth. Supply zero actions to audit baseline.
 This interface is ready for experiments; a trained V29 policy does not exist.
 """
@@ -28,7 +28,7 @@ class ResidualLandingEnv(gym.Wrapper):
 
     def _prepare(self, obs):
         self._baseline = self.controller(obs)
-        integrals = np.r_[self.controller._integral, self.controller._vz_integral]
+        integrals = np.r_[self.controller._disturbance, self.controller._vz_integral]
         phase = [float(self.controller.phase == name) for name in PHASES]
         return np.r_[obs, self._baseline, integrals, phase].astype(np.float32)
 
@@ -46,7 +46,7 @@ class ResidualLandingEnv(gym.Wrapper):
         if te or tr:
             # Do not advance controller memory after the mission has ended.
             phase = [float(self.controller.phase == name) for name in PHASES]
-            out = np.r_[obs, self._baseline, self.controller._integral,
+            out = np.r_[obs, self._baseline, self.controller._disturbance,
                         self.controller._vz_integral, phase].astype(np.float32)
             self._baseline = None
         else:
