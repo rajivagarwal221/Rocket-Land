@@ -196,6 +196,23 @@ def write_manifest(model_path: Path, manifest_path: Path, steps: int, extra=None
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def save_buffer(model):
+    """Write to a temp file first: an interrupted upload to Drive must never
+    leave a truncated buffer behind (that broke resume once)."""
+    tmp = BUFFER.with_name(BUFFER.stem + "_tmp.pkl")
+    model.save_replay_buffer(str(tmp))
+    os.replace(tmp, BUFFER)
+
+
+def load_buffer(model):
+    try:
+        model.load_replay_buffer(str(BUFFER))
+        print(f"[resume] replay buffer loaded ({model.replay_buffer.size() * N_ENVS:,} transitions)", flush=True)
+    except Exception as exc:  # truncated or incompatible file
+        print(f"[resume] replay buffer unreadable ({type(exc).__name__}: {exc}); "
+              "continuing with an empty buffer", flush=True)
+
+
 def save_model(model, path: Path, manifest: Path, extra=None):
     """Write to a temp file first so a crash mid-save never corrupts the checkpoint."""
     tmp = path.with_name(path.stem + "_tmp.zip")
@@ -217,7 +234,7 @@ class CheckpointCB(BaseCallback):
             save_model(self.model, LATEST, LATEST_MANIFEST)
             if t - self._last_buffer >= BUFFER_EVERY:
                 self._last_buffer = t
-                self.model.save_replay_buffer(str(BUFFER))
+                save_buffer(self.model)
             print(f"[checkpoint] t={t:,}", flush=True)
         return True
 
@@ -305,7 +322,7 @@ def main():
     if resume:
         model = SAC.load(str(LATEST), env=train_vec, device=DEVICE, tensorboard_log=TB_DIR)
         if BUFFER.exists():
-            model.load_replay_buffer(str(BUFFER))
+            load_buffer(model)
         print(f"[resume] t={model.num_timesteps:,} of {TOTAL_STEPS:,}", flush=True)
     else:
         model = SAC(
@@ -334,7 +351,7 @@ def main():
         print("[train] interrupted: saving so the run can resume.", flush=True)
     finally:
         save_model(model, LATEST, LATEST_MANIFEST)
-        model.save_replay_buffer(str(BUFFER))
+        save_buffer(model)
         train_vec.close()
     print(f"V29 residual stopped at t={model.num_timesteps:,} after "
           f"{(time.time() - started) / 3600:.2f} h.", flush=True)
