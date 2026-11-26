@@ -15,6 +15,9 @@ Wind handling (Wave 1 guidance):
   quickly so the next gust has little time to act.
 - The hover gate at 1.5 m is loose on purpose: precise centring happens in the
   touchdown hold, so gusts no longer burn the mission clock at altitude.
+- The hold releases only within 0.2 m of the measured centre: the per-flight
+  navigation offset (~0.1 m per axis) plus drift during the drop then stays
+  inside the 0.5 m pad.
 - During the final drop the lean is capped, trading a few centimetres of
   drift for staying under the touchdown tilt limit.
 """
@@ -31,7 +34,8 @@ GATE_ERROR, GATE_SPEED = 0.4, 0.5              # m, m/s: ACQUIRE -> DESCEND
 ABORT_ERROR, ABORT_ALT = 0.45, 0.7             # DESCEND -> ACQUIRE
 MIN_DESCENT = 0.25                 # m/s
 TD_ALT = 0.6                       # m, touchdown hold zone
-TD_SPEED, TD_ERROR = 0.25, 0.4     # m/s, m
+TD_SPEED, TD_ERROR = 0.25, 0.2     # m/s, m; 0.4 let 13 of 1551 dev flights
+                                   # (wind <= 4 m/s) drift past the 0.5 m pad
 TD_LEAN = math.radians(6.0)        # release only when the needed lean is below this
 TD_MAX_HOLD = 4.0                  # s per attempt
 TD_DROP = 0.5                      # m/s final drop after release
