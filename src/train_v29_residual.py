@@ -10,6 +10,13 @@ Reward is the mission's own: +100 for a precise landing, -100 for any failure,
 and a small per-step cost for time, distance and tilt. No extra shaping terms:
 every hand-added term in V24, V25 and V28 was exploited or regressed.
 
+Run 1 (gamma 0.99, random-start actor) regressed from 93.5% to 75% over 2M
+steps. Two causes, both fixed here: episodes last 400-900 control steps, so
+gamma 0.99 weighted the landing reward by ~0.99^500 = 0.007 and the policy
+chased per-step costs; and a randomly initialised actor perturbed a controller
+that already lands 91.7%. Now gamma 0.999 and the actor's mean starts at zero,
+so the untrained policy reproduces the classical controller exactly.
+
 Training environment: full difficulty (wind and gusts, mass / inertia / thrust,
 lag, misalignment, fuel burn, throttle floor, pad tilt, density), 2-step sensor
 delay, sensor noise and bias, position-fix dropouts.
@@ -91,11 +98,11 @@ FRESH = os.environ.get("V29_FRESH", "0") == "1"
 DIFFICULTY, DELAY, NOISE, DROPOUT = 1.0, 2, 1.0, 0.005
 
 NET_ARCH = [256, 256]
-LR = 3e-4
+LR = 1e-4
 BATCH_SIZE = 256
 BUFFER_SIZE = 500_000
 LEARNING_STARTS = 10_000
-GAMMA = 0.99
+GAMMA = 0.999                # horizon ~1000 steps = the 20 s mission
 TAU = 0.005
 GRADIENT_STEPS = max(1, N_ENVS // 2)
 # Low target entropy keeps exploration small, so early training does not wreck
@@ -333,6 +340,11 @@ def main():
             stats_window_size=200, seed=SEED, device=DEVICE,
             tensorboard_log=TB_DIR, verbose=1,
         )
+        # Start from 'no correction': tanh(0) = 0, so the deterministic policy
+        # is exactly the classical controller until learning moves it.
+        with torch.no_grad():
+            model.actor.mu.weight.zero_()
+            model.actor.mu.bias.zero_()
 
     remaining = TOTAL_STEPS - model.num_timesteps
     print(f"V29 residual on {DEVICE}: {TOTAL_STEPS:,} steps ({remaining:,} to go), "
