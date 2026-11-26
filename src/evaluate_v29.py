@@ -25,13 +25,14 @@ from sim3d.residual import ResidualLandingEnv
 
 
 def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=None, traces=None,
-          dropout=0.0, model=None, wind_limit=None):
+          dropout=0.0, model=None, wind_limit=None, nav='gps'):
     if episodes <= 0 or delay < 0 or not 0 <= difficulty <= 1:
         raise ValueError('Positive episodes, nonnegative delay, difficulty in [0,1] required')
     if wind_limit is not None and wind_limit < 0:
         raise ValueError('wind_limit must be nonnegative (m/s)')
     raw = MissionEnv(difficulty=difficulty)
-    env = mission_sensors(raw, delay=delay, noise_scale=1.0 if noise else 0.0, dropout=dropout)
+    env = mission_sensors(raw, delay=delay, noise_scale=1.0 if noise else 0.0, dropout=dropout,
+                          nav=nav)
     policy = None
     if model is not None:
         from stable_baselines3 import SAC
@@ -39,7 +40,7 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
         env = ResidualLandingEnv(env)
         controller = env.controller
     else:
-        controller = LandingController(raw.params)
+        controller = LandingController(raw.params, nav=nav)
     rows = []
     try:
         for ep in range(episodes):
@@ -89,7 +90,7 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
     name = f'classical v29 + residual {Path(model).name}' if model else 'observation-driven classical v29'
     summary = dict(controller=name, episodes=episodes,
                    seed=seed, difficulty=difficulty, delay_steps=delay, noise=noise,
-                   nav_dropout_rate=dropout, wind_limit_mps=wind_limit,
+                   nav_dropout_rate=dropout, nav_profile=nav, wind_limit_mps=wind_limit,
                    flown=flown, scrubbed=scrubbed, scrub_rate=scrubbed/episodes,
                    outcomes=dict(counts), precise_rate=rate,
                    precise_wilson95=wilson(counts['PRECISE'], flown),
@@ -124,8 +125,10 @@ if __name__ == '__main__':
     p.add_argument('--model', type=Path, help='trained residual SAC checkpoint (.zip)')
     p.add_argument('--wind-limit', type=float,
                    help='scrub (do not fly) episodes whose mean wind exceeds this, m/s (e.g. 4)')
+    p.add_argument('--nav', choices=['gps', 'rtk'], default='gps',
+                   help='position-fix quality: gps (0.10 m offset) or rtk (0.02 m)')
     a = p.parse_args()
     if a.model is not None and not a.model.is_file():
         p.error(f'checkpoint not found: {a.model}')
     audit(a.episodes, a.seed, a.difficulty, a.delay, a.noise, a.out, a.traces, a.dropout, a.model,
-          a.wind_limit)
+          a.wind_limit, a.nav)

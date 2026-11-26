@@ -271,6 +271,26 @@ class MissionTests(unittest.TestCase):
         self.assertEqual(sum(summary['outcomes'].values()), 6 - expected)
         self.assertNotIn('SCRUBBED', summary['outcomes'])
 
+    def test_rtk_profile_shrinks_only_position_error(self):
+        from sim3d.mission_wrappers import mission_sensors
+        obs = {}
+        for nav in ('gps', 'rtk'):
+            e = mission_sensors(MissionEnv(difficulty=0), noise_scale=1.0, nav=nav)
+            noisy, _ = e.reset(seed=11)
+            obs[nav] = noisy - e.unwrapped._obs(e.unwrapped.kinematics(), 0)
+            e.close()
+        # Paired draws: horizontal position error shrinks, everything else is identical.
+        self.assertTrue((abs(obs['rtk'][:2]) < abs(obs['gps'][:2])).all())
+        np.testing.assert_allclose(obs['rtk'][2:], obs['gps'][2:], atol=1e-6)
+        with self.assertRaises(ValueError):
+            mission_sensors(MissionEnv(), nav='lidar')
+
+    def test_touchdown_release_radius_follows_nav_grade(self):
+        self.assertEqual(LandingController().td_error, 0.2)
+        self.assertEqual(LandingController(nav='rtk').td_error, 0.4)
+        with self.assertRaises(ValueError):
+            LandingController(nav='lidar')
+
 
 if __name__ == '__main__':
     unittest.main()

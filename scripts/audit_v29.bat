@@ -10,6 +10,9 @@ echo === Classical guidance ===
 echo === Classical guidance, 4 m/s wind limit (windier episodes scrubbed) ===
 .venv\Scripts\python.exe src\evaluate_v29.py %ARGS% --wind-limit 4 --out logs\classical_heldout_wind4.csv
 
+echo === Classical guidance, 4 m/s wind limit, RTK position fix ===
+.venv\Scripts\python.exe src\evaluate_v29.py %ARGS% --wind-limit 4 --nav rtk --out logs\classical_heldout_wind4_rtk.csv
+
 if not exist models\master_v29_residual_best.zip (
     echo No residual has beaten the classical baseline yet - nothing more to audit.
     exit /b 0

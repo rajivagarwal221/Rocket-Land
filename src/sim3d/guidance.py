@@ -15,9 +15,11 @@ Wind handling (Wave 1 guidance):
   quickly so the next gust has little time to act.
 - The hover gate at 1.5 m is loose on purpose: precise centring happens in the
   touchdown hold, so gusts no longer burn the mission clock at altitude.
-- The hold releases only within 0.2 m of the measured centre: the per-flight
-  navigation offset (~0.1 m per axis) plus drift during the drop then stays
-  inside the 0.5 m pad.
+- The hold releases only within TD_ERROR of the measured centre, sized to the
+  position fix: pad radius 0.5 m minus ~3x the per-flight offset. GPS-grade
+  (0.10 m offset) -> 0.2 m; RTK (0.02 m) -> 0.4 m. A tighter gate than the
+  sensor needs only lengthens the hover, and a hold that times out in gusts
+  ends in a forced drop at ~10 deg tilt (RTK, 0.2 m: 5 crashes in 1524).
 - During the final drop the lean is capped, trading a few centimetres of
   drift for staying under the touchdown tilt limit.
 """
@@ -34,8 +36,8 @@ GATE_ERROR, GATE_SPEED = 0.4, 0.5              # m, m/s: ACQUIRE -> DESCEND
 ABORT_ERROR, ABORT_ALT = 0.45, 0.7             # DESCEND -> ACQUIRE
 MIN_DESCENT = 0.25                 # m/s
 TD_ALT = 0.6                       # m, touchdown hold zone
-TD_SPEED, TD_ERROR = 0.25, 0.2     # m/s, m; 0.4 let 13 of 1551 dev flights
-                                   # (wind <= 4 m/s) drift past the 0.5 m pad
+TD_SPEED = 0.25                    # m/s
+TD_ERROR = {'gps': 0.2, 'rtk': 0.4}  # m, release radius per position-fix grade
 TD_LEAN = math.radians(6.0)        # release only when the needed lean is below this
 TD_MAX_HOLD = 4.0                  # s per attempt
 TD_DROP = 0.5                      # m/s final drop after release
@@ -52,9 +54,12 @@ def residual_action(baseline, residual, authority=(0.10, 0.15, 0.15, 0.10)):
 
 
 class LandingController:
-    def __init__(self, params=None, dt=0.02):
+    def __init__(self, params=None, dt=0.02, nav='gps'):
+        if nav not in TD_ERROR:
+            raise ValueError(f'nav must be one of {sorted(TD_ERROR)}')
         self.params = params or RocketParams()
         self.dt = float(dt)
+        self.td_error = TD_ERROR[nav]
         self.reset()
 
     def reset(self):
@@ -130,7 +135,7 @@ class LandingController:
             v_des = float(np.clip(0.7 * (1.5-alt), -0.7, 0.7))
         elif self.phase == 'DESCEND' and alt < TD_ALT:
             unready = (float(np.linalg.norm(self._v_est)) > TD_SPEED
-                       or error > TD_ERROR or lean_needed > TD_LEAN)
+                       or error > self.td_error or lean_needed > TD_LEAN)
             if unready and self._hold_time < TD_MAX_HOLD:
                 self._hold_time += dt
                 v_des = float(np.clip(0.7 * TD_ALT - alt, -0.3, 0.3))

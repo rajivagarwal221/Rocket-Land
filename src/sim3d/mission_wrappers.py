@@ -3,13 +3,21 @@ import gymnasium as gym
 import numpy as np
 
 from sensor_noise import ObservationDelay
-from sim3d.wrappers import ImuNoise
+from sim3d.wrappers import IMU_BIAS_STD, IMU_NOISE_STD, ImuNoise
 
 # Observation entries that come from the position fix (GPS / vision): horizontal
 # position, altitude and velocity. Attitude, gyro, leg switches and actuator
 # feedback come from the IMU and local hardware and keep updating.
 NAV_SLICE = slice(0, 6)
 BURST_STEPS = (1, 10)   # 20-200 ms at 50 Hz
+
+# Horizontal position-fix quality (metres, 1-sigma per axis): per-step noise
+# and the per-flight offset. 'gps' is the placeholder used since V28 (0.05 m
+# noise, 0.10 m offset). 'rtk' is a carrier-phase RTK fix: about 1-2 cm, so
+# 0.02 m for both is a conservative datasheet-style figure. Other entries
+# (altitude, velocity, IMU) are unchanged.
+NAV_PROFILES = {'gps': (0.05, 0.10), 'rtk': (0.02, 0.02)}
+POS_UNIT = 10.0        # observation position = metres / 10
 
 
 class SeededImuNoise(ImuNoise):
@@ -55,9 +63,15 @@ class NavDropout(gym.Wrapper):
         return obs, reward, te, tr, info
 
 
-def mission_sensors(raw, delay=0, noise_scale=0.0, dropout=0.0):
+def mission_sensors(raw, delay=0, noise_scale=0.0, dropout=0.0, nav='gps'):
     if delay < 0 or not 0 <= noise_scale <= 1:
         raise ValueError('Nonnegative delay and noise scale in [0,1] required')
-    env = SeededImuNoise(ObservationDelay(raw, delay_steps=delay))
+    if nav not in NAV_PROFILES:
+        raise ValueError(f'nav must be one of {sorted(NAV_PROFILES)}')
+    noise, bias = IMU_NOISE_STD.copy(), IMU_BIAS_STD.copy()
+    noise[:2], bias[:2] = (v / POS_UNIT for v in NAV_PROFILES[nav])
+    # Same random draws for every profile, so 'gps' vs 'rtk' audits are paired.
+    env = SeededImuNoise(ObservationDelay(raw, delay_steps=delay),
+                         noise_std=noise, bias_std=bias)
     env.set_scale(noise_scale)
     return NavDropout(env, rate=dropout) if dropout > 0 else env
