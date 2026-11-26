@@ -1,6 +1,6 @@
 # Rocket-Land — Status and Roadmap
 
-Updated 2026-11-23. Numbers are seeded audits; "held-out" = seeds 90000–90999, never used for tuning.
+Updated 2026-11-26. Numbers are seeded audits; "held-out" = seeds 90000–90999, never used for tuning.
 
 ## Phases
 1. **Perfect the policy in simulation** — 2D done; 3D in progress.
@@ -36,19 +36,16 @@ Held-out breakdown (every factor on): calm wind 98.8%, wind ≥3 m/s 78.6%; fail
 
 | Item | State |
 |---|---|
-| `src/train_v29_residual.py` — SAC correction (±10–15%) on top of classical guidance; auto-resume; best saved only if it beats baseline | Written, smoke-tested locally (train / eval / checkpoint / resume work) |
-| `evaluate_v29.py --model` | Written; final local cross-check was interrupted |
-| `notebooks/v29_colab.ipynb` — setup → classical audit → train → residual audit | Written |
-| Commit + push of the above | **Blocked — needs your approval.** Colab can't run it until pushed |
-| Colab run | Notebook open in browser pane; needs your Google sign-in |
-
-Local uncommitted files: `guidance.py`, `mission_wrappers.py`, `residual.py`, `evaluate_v29.py`, `tests/test_v29.py`, `train_v29_residual.py`, `notebooks/v29_colab.ipynb`. 23 tests pass.
+| `src/train_v29_residual.py`: SAC correction (±10–15%) on top of classical guidance; auto-resume; best saved only if it beats baseline | Committed and pushed. 23 unit tests in `tests/test_v29.py` pass |
+| Residual run 1 (gamma 0.99, random-start actor) | **Regressed** 93.5% → 75% on selection seeds over 2M steps. Cause: gamma 0.99 discounted the landing reward to ~0.7% across 400–900-step episodes, and a random actor perturbed a controller that already lands 91.7% |
+| Fix (`d4d0677`) | gamma 0.999, zero-start actor (untrained policy = classical exactly), lower learning rate; `scripts\train_v29.bat fresh` option |
+| Residual run 2 | **Next to start:** `scripts\train_v29.bat fresh` on the local RTX 3050, or `notebooks/v29_colab.ipynb` on Colab, then `scripts\audit_v29.bat` |
 
 ---
 
 ## ⏭️ Next
 
-1. **Approve push** → run `v29_colab.ipynb` on Colab (T4): classical held-out audit, 2M-step residual training, residual held-out audit.
+1. **Run residual training afresh** (local GPU or Colab) and audit it on held-out seeds against classical guidance.
 2. **Decide on the residual:** ship it only if its held-out score beats 91.7% with non-overlapping confidence intervals.
 3. **If residual stalls below ~95%:** set an operating wind limit (e.g. ≤4 m/s mean already gives 98.2%) or increase gimbal authority.
 4. **Remaining sim factors:** ground effect (needs measured data), abort envelope, fuel-reserve rule.
@@ -56,5 +53,5 @@ Local uncommitted files: `guidance.py`, `mission_wrappers.py`, `residual.py`, `e
 6. Phase 2: first small-rocket flights.
 
 ## Housekeeping
-- `ede477d` committed `models/DesktopCommander-Remote.cmd` and a duplicate `v29_parameter_gap.pdf` at repo root — safe to delete.
+- Model checkpoints (`models/*.zip`, `*.pkl`) are no longer tracked; they live locally or on Drive. Run manifests (`*_manifest.json`) stay in the repo. Old checkpoints remain in git history (`.git` ≈150 MB) unless history is rewritten.
 - Seed rules: develop on 30000+, select checkpoints on 50000+, audit on 90000+, train on 1,000,000+.

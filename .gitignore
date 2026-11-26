@@ -12,7 +12,17 @@ env/
 
 # Training outputs (large; regenerable)
 logs/
+tensorboard/
+checkpoints/
 models/checkpoints/
+
+# Model checkpoints and replay buffers (kept locally / on Drive, not in git).
+# Small *_manifest.json files in models/ stay tracked as the record of each run.
+models/*.pkl
+models/*.zip
+models/*.pt
+models/*.pth
+models/*.onnx
 
 # Blender backups and render intermediates
 blender/*.blend1
@@ -26,39 +36,3 @@ Thumbs.db
 
 # Local tooling
 .claude/
-
-# Reinforcement Learning Checkpoints
-models/*.pkl
-models/*.zip
-models/*.pt
-models/*.pth
-models/*.onnx
-
-# Training outputs
-logs/
-tensorboard/
-checkpoints/
-
-# Rocket-Land RL checkpoints
-models/*.pkl
-models/*.zip
-models/*.pt
-models/*.pth
-models/*.onnx
-
-# Training outputs
-logs/
-tensorboard/
-checkpoints/
-
-# Rocket-Land RL checkpoints
-models/*.pkl
-models/*.zip
-models/*.pt
-models/*.pth
-models/*.onnx
-
-# Training outputs
-logs/
-tensorboard/
-checkpoints/
