@@ -1,5 +1,12 @@
 """Seeded V29 audit: classical guidance, or guidance plus a trained residual
-(--model). Never passes simulator truth to control."""
+(--model). Never passes simulator truth to control.
+
+--wind-limit is a pre-flight GO/NO-GO, like a launch-commit weather rule: an
+episode whose mean wind exceeds the limit is SCRUBBED (not flown) and the
+precise rate is reported over flown episodes. The gate reads the mean wind
+before flight, standing in for a ground anemometer; gusts still fly.
+Every episode keeps its own seed, so flown episodes are identical to the
+unlimited audit."""
 import argparse
 import csv
 import hashlib
@@ -18,9 +25,11 @@ from sim3d.residual import ResidualLandingEnv
 
 
 def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=None, traces=None,
-          dropout=0.0, model=None):
+          dropout=0.0, model=None, wind_limit=None):
     if episodes <= 0 or delay < 0 or not 0 <= difficulty <= 1:
         raise ValueError('Positive episodes, nonnegative delay, difficulty in [0,1] required')
+    if wind_limit is not None and wind_limit < 0:
+        raise ValueError('wind_limit must be nonnegative (m/s)')
     raw = MissionEnv(difficulty=difficulty)
     env = mission_sensors(raw, delay=delay, noise_scale=1.0 if noise else 0.0, dropout=dropout)
     policy = None
@@ -35,6 +44,10 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
     try:
         for ep in range(episodes):
             obs, _ = env.reset(seed=seed+ep)
+            if wind_limit is not None and raw.episode_meta['wind_speed'] > wind_limit:
+                rows.append(dict(episode=ep, seed=seed+ep, steps=0, return_=0.0,
+                                 **raw.episode_meta, outcome='SCRUBBED'))
+                continue
             if policy is None:
                 controller.reset()
             total, phases, trace = 0., Counter(), []
@@ -63,20 +76,25 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
                         (folder / f'failure_{seed+ep}.jsonl').write_text(
                             '\n'.join(json.dumps(t) for t in trace)+'\n', encoding='utf-8')
                     break
-            if (ep+1) % 25 == 0:
+            if (ep+1) % 25 == 0 and rows[-1]['outcome'] != 'SCRUBBED':
                 print(f'{ep+1}/{episodes}: {dict(Counter(r["outcome"] for r in rows))}', flush=True)
     finally:
         env.close()
     counts = Counter(r['outcome'] for r in rows)
-    rate = counts['PRECISE']/episodes
+    scrubbed = counts.pop('SCRUBBED', 0)
+    flown = episodes - scrubbed
+    if flown == 0:
+        raise ValueError(f'wind limit {wind_limit} m/s scrubbed every episode')
+    rate = counts['PRECISE']/flown
     name = f'classical v29 + residual {Path(model).name}' if model else 'observation-driven classical v29'
     summary = dict(controller=name, episodes=episodes,
                    seed=seed, difficulty=difficulty, delay_steps=delay, noise=noise,
-                   nav_dropout_rate=dropout,
+                   nav_dropout_rate=dropout, wind_limit_mps=wind_limit,
+                   flown=flown, scrubbed=scrubbed, scrub_rate=scrubbed/episodes,
                    outcomes=dict(counts), precise_rate=rate,
-                   precise_wilson95=wilson(counts['PRECISE'], episodes),
+                   precise_wilson95=wilson(counts['PRECISE'], flown),
                    clean_gate_passed=(difficulty == 0 and delay == 0 and not noise and not dropout
-                                      and episodes >= 200 and rate >= .99),
+                                      and flown >= 200 and rate >= .99),
                    params=asdict(raw.params), config=asdict(raw.cfg),
                    xml_sha256=hashlib.sha256(Path(__file__).with_name('sim3d').joinpath('rocket.xml').read_bytes()).hexdigest())
     print(json.dumps(summary, indent=2))
@@ -84,7 +102,8 @@ def audit(episodes=200, seed=30000, difficulty=0.0, delay=0, noise=False, out=No
         out = Path(out)
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open('w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+            fields = list(dict.fromkeys(k for r in rows for k in r))
+            writer = csv.DictWriter(f, fieldnames=fields, restval='')
             writer.writeheader()
             writer.writerows(rows)
         out.with_suffix('.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
@@ -103,7 +122,10 @@ if __name__ == '__main__':
     p.add_argument('--out', type=Path)
     p.add_argument('--traces', type=Path, help='save per-step telemetry for failed development episodes')
     p.add_argument('--model', type=Path, help='trained residual SAC checkpoint (.zip)')
+    p.add_argument('--wind-limit', type=float,
+                   help='scrub (do not fly) episodes whose mean wind exceeds this, m/s (e.g. 4)')
     a = p.parse_args()
     if a.model is not None and not a.model.is_file():
         p.error(f'checkpoint not found: {a.model}')
-    audit(a.episodes, a.seed, a.difficulty, a.delay, a.noise, a.out, a.traces, a.dropout, a.model)
+    audit(a.episodes, a.seed, a.difficulty, a.delay, a.noise, a.out, a.traces, a.dropout, a.model,
+          a.wind_limit)

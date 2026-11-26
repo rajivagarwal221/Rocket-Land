@@ -258,6 +258,19 @@ class MissionTests(unittest.TestCase):
         np.testing.assert_array_equal(e.step([1, 0.5, 0, 0])[0], held)
         e.close()
 
+    def test_wind_limit_scrubs_only_windy_episodes(self):
+        from evaluate_v29 import audit
+        probe = MissionEnv(difficulty=1)
+        winds = [probe.reset(seed=500 + i)[1]['wind_speed'] for i in range(6)]
+        probe.close()
+        expected = sum(w > 3.0 for w in winds)
+        self.assertTrue(0 < expected < 6, winds)  # seeds chosen to mix GO and NO-GO
+        summary = audit(episodes=6, seed=500, difficulty=1, wind_limit=3.0)
+        self.assertEqual(summary['scrubbed'], expected)
+        self.assertEqual(summary['flown'], 6 - expected)
+        self.assertEqual(sum(summary['outcomes'].values()), 6 - expected)
+        self.assertNotIn('SCRUBBED', summary['outcomes'])
+
 
 if __name__ == '__main__':
     unittest.main()
